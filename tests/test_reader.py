@@ -3,10 +3,11 @@ import pickle
 import tempfile
 from functools import partial
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Optional
 
 import numpy as np
 import pytest
+from tqdm import tqdm
 
 import pyxtc._core as core
 from pyxtc import XTCReader
@@ -118,14 +119,18 @@ def test_serialize():
         )
 
 
-def make_traj_frames_iter(natoms, nframes):
+def make_traj_frames_iter(
+    *, nframes: int, natoms: Optional[int] = None, precision: Optional[float] = None
+):
     gen = np.random.default_rng(seed=0)
-    for frame in range(1, nframes + 1):
+    if precision is None:
+        precision = 10.0
+    for frame in tqdm(range(1, nframes + 1), total=nframes):
         step = gen.integers(low=-1000, high=100)
         time = (gen.random(dtype=np.float32, size=(1,)) * 1000.0)[
             0
         ]  # float32 scalar array gets converted to float if multiplied
-        natoms = frame + (frame > 10) * 100
+        natoms = frame + (frame > 10) * 100 if natoms is None else natoms
         box = gen.random((3, 3), dtype=np.float32) + 1
         data = (gen.random((natoms, 3), dtype=np.float32) - 0.5) * 100.0
         yield (
@@ -153,8 +158,16 @@ def write_traj_iter(frames: Iterable[XTCframe], filename: str, mode: str = "wb+"
         core.xdrclose(x)
 
 
-def make_large_traj(traj_path: Path, natoms: int = 10000, nframes: int = 1000):
-    write_traj_iter(make_traj_frames_iter(natoms, nframes), str(traj_path))
+def make_large_traj(
+    traj_path: Path,
+    natoms: int = 10000,
+    nframes: int = 1000,
+    precision: Optional[float] = None,
+):
+    write_traj_iter(
+        make_traj_frames_iter(natoms=natoms, nframes=nframes, precision=precision),
+        str(traj_path),
+    )
 
 
 @pytest.fixture(scope="module")
@@ -167,6 +180,16 @@ def large_traj():
     return path
 
 
+@pytest.fixture(scope="module")
+def huge_traj():
+    d = Path(__file__).parent / ".cache"
+    d.mkdir(exist_ok=True)
+    path = d / "huge_traj.xtc"
+    if not path.exists():
+        make_large_traj(path, natoms=174246, nframes=4000, precision=1000.0)
+    return path
+
+
 @pytest.mark.parametrize("data", [False, True])
 def test_perf(benchmark, large_traj, data):
     def xtc_info(traj_path: Path, data):
@@ -176,6 +199,11 @@ def test_perf(benchmark, large_traj, data):
                     reader.seek(i, data=True)
 
     benchmark(partial(xtc_info, large_traj), data)
+
+
+def test_offset(huge_traj):
+    with XTCReader.open(huge_traj) as reader:
+        assert len(reader.index) == 4000
 
 
 def test_memory_leak(large_traj):

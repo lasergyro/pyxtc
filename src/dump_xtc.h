@@ -11,25 +11,23 @@
    See the README file in the top-level LAMMPS directory.
 ------------------------------------------------------------------------- */
 
-
 #ifndef PYXTC_DUMP_XTC_H
 #define PYXTC_DUMP_XTC_H
 
 #include <stdio.h>
 #include "xdr_compat.h"
 
-
 #define MAXSMALLINT INT_MAX
 
 // namespace PYXTC_NS {
 
-XDR* xdropen(char*, const char *);
+XDR *xdropen(char *, const char *);
 int xdrclose(XDR *);
 void xdrfreebuf();
-bool_t xdr_header(XDR *,int *,int *,float *,float *);
+bool_t xdr_header(XDR *, int *, int *, float *, float *);
 int xdr3dfcoord(XDR *, float *, int *, float *);
-unsigned int xdrgetpos(XDR *);
-bool_t xdrsetpos(XDR*,unsigned int*);
+off_t xdrgetpos(XDR *);
+bool_t xdrsetpos(XDR *, off_t *);
 // }
 
 #endif

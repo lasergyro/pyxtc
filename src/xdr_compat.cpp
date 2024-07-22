@@ -585,8 +585,8 @@ xdr_vector (XDR *xdrs, char *basep, unsigned int nelem,
 
 static bool_t xdrstdio_getbytes (XDR *, char *, unsigned int);
 static bool_t xdrstdio_putbytes (XDR *, char *, unsigned int);
-static unsigned int xdrstdio_getpos (XDR *);
-static bool_t xdrstdio_setpos (XDR *, unsigned int);
+static off_t xdrstdio_getpos (XDR *);
+static bool_t xdrstdio_setpos (XDR *, off_t);
 static xdr_int32_t *xdrstdio_inline (XDR *, int);
 static void xdrstdio_destroy (XDR *);
 static bool_t xdrstdio_getint32 (XDR *, xdr_int32_t *);
@@ -658,16 +658,16 @@ xdrstdio_putbytes (XDR *xdrs, char *addr, unsigned int len)
   return TRUE;
 }
 
-static unsigned int
+static off_t
 xdrstdio_getpos (XDR *xdrs)
 {
-  return (unsigned int) ftell ((FILE *) xdrs->x_private);
+  return ftello ((FILE *) xdrs->x_private);
 }
 
 static bool_t
-xdrstdio_setpos (XDR *xdrs, unsigned int pos)
+xdrstdio_setpos (XDR *xdrs, off_t pos)
 {
-  return fseek ((FILE *) xdrs->x_private, (xdr_int32_t) pos, 0) < 0 ? FALSE : TRUE;
+  return fseeko ((FILE *) xdrs->x_private, pos, 0) < 0 ? FALSE : TRUE;
 }
 
 static xdr_int32_t *

@@ -285,6 +285,38 @@ def assert_traj_equivalent(traj: XTCtraj, traj2: XTCtraj, opts: Opts):
         assert_frame_equivalent(frame, frame2, opts)
 
 
+def make_traj_det():
+    frames = []
+    for frame in range(1, 10):
+        step = frame
+        time = (np.ones(1) * frame * 1000.0)[
+            0
+        ]  # float32 scalar array gets converted to float if multiplied
+        natoms = frame + (frame > 10) * 100
+        box = np.zeros((3, 3), dtype=np.float32) + 1
+        data = (
+            ((np.arange(natoms * 3) / natoms).astype(np.float32).reshape(-1, 3)) - 0.5
+        ) * 100.0
+        frames.append(
+            XTCframe(
+                step=step,
+                time=time,
+                box=box,
+                precision=10.0 if natoms > 9 else 0.0,
+                natoms=natoms,
+                coords=data,
+                offset=-1,
+            )
+        )
+    return XTCtraj(frames=frames)
+
+
+def test_write_det():
+    name = "tmp.xtc"
+    traj = make_traj_det()
+    write_traj(traj, name)
+
+
 def test_read_write():
     with NamedTemporaryFile() as f:
         traj = make_traj()
