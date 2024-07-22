@@ -2,6 +2,7 @@
 #include "xdr_compat.h"
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
 
 /* This file is needed for systems, that do not provide XDR support
  * in their system libraries. It was written for windows, but will
@@ -48,11 +49,22 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+#define xdr_getint32(xdrs, int32p) xdrstdio_getint32(xdrs, int32p)
+#define xdr_putint32(xdrs, int32p) xdrstdio_putint32(xdrs, int32p)
+#define xdr_getuint32(xdrs, uint32p) xdrstdio_getuint32(xdrs, uint32p)
+#define xdr_putuint32(xdrs, uint32p) xdrstdio_putuint32(xdrs, uint32p)
+#define xdr_getbytes(xdrs, addr, len) xdrstdio_getbytes(xdrs, addr, len)
+#define xdr_putbytes(xdrs, addr, len) xdrstdio_putbytes(xdrs, addr, len)
+#define xdr_getpos(xdrs) xdrstdio_getpos(xdrs)
+#define xdr_setpos(xdrs, pos) xdrstdio_setpos(xdrs, pos)
+#define xdr_inline(xdrs, len) xdrstdio_inline(xdrs, len)
+#define xdr_destroy(xdrs)  xdrstdio_destroy(xdrs)
+
 
 /*
  * for unit alignment
  */
-static char xdr_zero[BYTES_PER_XDR_UNIT] = {0, 0, 0, 0};
+thread_local static char xdr_zero[BYTES_PER_XDR_UNIT] = {0, 0, 0, 0};
 
 static xdr_uint32_t xdr_swapbytes(xdr_uint32_t x)
 {
@@ -583,16 +595,16 @@ xdr_vector (XDR *xdrs, char *basep, unsigned int nelem,
 
 
 
-static bool_t xdrstdio_getbytes (XDR *, char *, unsigned int);
-static bool_t xdrstdio_putbytes (XDR *, char *, unsigned int);
-static off_t xdrstdio_getpos (XDR *);
-static bool_t xdrstdio_setpos (XDR *, off_t);
-static xdr_int32_t *xdrstdio_inline (XDR *, int);
-static void xdrstdio_destroy (XDR *);
-static bool_t xdrstdio_getint32 (XDR *, xdr_int32_t *);
-static bool_t xdrstdio_putint32 (XDR *, xdr_int32_t *);
-static bool_t xdrstdio_getuint32 (XDR *, xdr_uint32_t *);
-static bool_t xdrstdio_putuint32 (XDR *, xdr_uint32_t *);
+// static bool_t xdrstdio_getbytes (XDR *, char *, unsigned int);
+// static bool_t xdrstdio_putbytes (XDR *, char *, unsigned int);
+// static off_t xdrstdio_getpos (XDR *);
+// static bool_t xdrstdio_setpos (XDR *, off_t);
+// static xdr_int32_t *xdrstdio_inline (XDR *, int);
+// static void xdrstdio_destroy (XDR *);
+// static bool_t xdrstdio_getint32 (XDR *, xdr_int32_t *);
+// static bool_t xdrstdio_putint32 (XDR *, xdr_int32_t *);
+// static bool_t xdrstdio_getuint32 (XDR *, xdr_uint32_t *);
+// static bool_t xdrstdio_putuint32 (XDR *, xdr_uint32_t *);
 
 /*
  * Ops vector for stdio type XDR
@@ -632,7 +644,7 @@ xdrstdio_create (XDR *xdrs, FILE *file, enum xdr_op op)
  * Destroy a stdio xdr stream.
  * Cleans up the xdr stream handle xdrs previously set up by xdrstdio_create.
  */
-static void
+extern void
 xdrstdio_destroy (XDR *xdrs)
 {
   (void) fflush ((FILE *) xdrs->x_private);
@@ -640,7 +652,7 @@ xdrstdio_destroy (XDR *xdrs)
 }
 
 
-static bool_t
+extern bool_t
 xdrstdio_getbytes (XDR *xdrs, char *addr, unsigned int len)
 {
   if ((len != 0) && (fread (addr, (int) len, 1,
@@ -649,7 +661,7 @@ xdrstdio_getbytes (XDR *xdrs, char *addr, unsigned int len)
   return TRUE;
 }
 
-static bool_t
+extern bool_t
 xdrstdio_putbytes (XDR *xdrs, char *addr, unsigned int len)
 {
   if ((len != 0) && (fwrite (addr, (int) len, 1,
@@ -658,19 +670,19 @@ xdrstdio_putbytes (XDR *xdrs, char *addr, unsigned int len)
   return TRUE;
 }
 
-static off_t
+extern off_t
 xdrstdio_getpos (XDR *xdrs)
 {
   return ftello ((FILE *) xdrs->x_private);
 }
 
-static bool_t
+extern bool_t
 xdrstdio_setpos (XDR *xdrs, off_t pos)
 {
   return fseeko ((FILE *) xdrs->x_private, pos, 0) < 0 ? FALSE : TRUE;
 }
 
-static xdr_int32_t *
+extern xdr_int32_t *
 xdrstdio_inline (XDR * /*xdrs*/, int /*len*/)
 {
   /*
@@ -685,7 +697,7 @@ xdrstdio_inline (XDR * /*xdrs*/, int /*len*/)
   return nullptr;
 }
 
-static bool_t
+extern bool_t
 xdrstdio_getint32 (XDR *xdrs, xdr_int32_t *ip)
 {
   xdr_int32_t mycopy;
@@ -696,7 +708,7 @@ xdrstdio_getint32 (XDR *xdrs, xdr_int32_t *ip)
   return TRUE;
 }
 
-static bool_t
+extern bool_t
 xdrstdio_putint32 (XDR *xdrs, xdr_int32_t *ip)
 {
   xdr_int32_t mycopy = xdr_htonl (*ip);
@@ -707,7 +719,7 @@ xdrstdio_putint32 (XDR *xdrs, xdr_int32_t *ip)
   return TRUE;
 }
 
-static bool_t
+extern bool_t
 xdrstdio_getuint32 (XDR *xdrs, xdr_uint32_t *ip)
 {
         xdr_uint32_t mycopy;
@@ -718,7 +730,7 @@ xdrstdio_getuint32 (XDR *xdrs, xdr_uint32_t *ip)
         return TRUE;
 }
 
-static bool_t
+extern bool_t
 xdrstdio_putuint32 (XDR *xdrs, xdr_uint32_t *ip)
 {
         xdr_uint32_t mycopy = xdr_htonl (*ip);

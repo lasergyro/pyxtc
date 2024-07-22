@@ -13,8 +13,6 @@
 
 #ifndef PYXTC_DUMP_XTC_H
 #define PYXTC_DUMP_XTC_H
-
-#include <stdio.h>
 #include "xdr_compat.h"
 
 #define MAXSMALLINT INT_MAX

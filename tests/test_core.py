@@ -8,13 +8,14 @@ from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Optional
+from typing import Iterable, Optional
 
 import numpy as np
 import yaml
 
 import pyxtc as m
 import pyxtc._core as core
+from tqdm.auto import tqdm
 
 
 @dataclass(frozen=True)
@@ -49,7 +50,7 @@ class XTCtraj:
         )
 
 
-def make_traj_lmp(path: Path, natoms: int, precision=1000.0, nframes=10):
+def make_traj_lmp(*, path: Path, nframes: int = 10, natoms: int, precision=1000.0):
     l = (natoms ** (1 / 3)) * 2
     lmp_str = textwrap.dedent(
         f"""\
@@ -104,6 +105,45 @@ def make_traj_lmp(path: Path, natoms: int, precision=1000.0, nframes=10):
     )
 
 
+def make_traj_frames_iter(
+    *, nframes: int, natoms: Optional[int] = None, precision: Optional[float] = None
+):
+    gen = np.random.default_rng(seed=0)
+    if precision is None:
+        precision = 10.0
+    for frame in tqdm(range(1, nframes + 1), total=nframes):
+        step = gen.integers(low=-1000, high=100)
+        time = (gen.random(dtype=np.float32, size=(1,)) * 1000.0)[
+            0
+        ]  # float32 scalar array gets converted to float if multiplied
+        natoms = (frame + (frame > 10) * 100) if natoms is None else natoms
+        box = gen.random((3, 3), dtype=np.float32) + 1
+        data = (gen.random((natoms, 3), dtype=np.float32) - 0.5) * 100.0
+        yield (
+            XTCframe(
+                step=step,
+                time=time,
+                box=box,
+                precision=precision if natoms > 9 else 0.0,
+                natoms=natoms,
+                coords=data,
+                offset=-1,
+            )
+        )
+
+
+def write_traj_iter(frames: Iterable[XTCframe], filename: str, mode: str = "wb+"):
+    x = core.xdropen(filename, mode)
+    try:
+        for frame in frames:
+            assert frame.coords is not None
+            n = frame.coords.shape[0]
+            core.header(x, n, frame.step, frame.time, frame.box)
+            core.data(x, frame.coords, n, frame.precision)
+    finally:
+        core.xdrclose(x)
+
+
 def read_lmp_yaml(p, precision: float, time_scale_factor: float):
     with (p / "log.yaml").open("r") as thermo_f:
         thermo = yaml.safe_load(thermo_f)
@@ -146,35 +186,10 @@ def read_lmp_yaml(p, precision: float, time_scale_factor: float):
     return XTCtraj(frames)
 
 
-def make_traj():
-    frames = []
-    gen = np.random.default_rng(seed=0)
-    for frame in range(1, 40):
-        step = gen.integers(low=-1000, high=100)
-        time = (gen.random(dtype=np.float32, size=(1,)) * 1000.0)[
-            0
-        ]  # float32 scalar array gets converted to float if multiplied
-        natoms = frame + (frame > 10) * 100
-        box = gen.random((3, 3), dtype=np.float32) + 1
-        data = (gen.random((natoms, 3), dtype=np.float32) - 0.5) * 100.0
-        frames.append(
-            XTCframe(
-                step=step,
-                time=time,
-                box=box,
-                precision=10.0 if natoms > 9 else 0.0,
-                natoms=natoms,
-                coords=data,
-                offset=-1,
-            )
-        )
-    return XTCtraj(frames=frames)
-
-
 def write_traj(traj: XTCtraj, filename: str, mode: str = "wb+"):
     x = core.xdropen(filename, mode)
     try:
-        for frame in traj.frames:
+        for frame in tqdm(traj.frames):
             assert frame.coords is not None
             n = frame.coords.shape[0]
             core.header(x, n, frame.step, frame.time, frame.box)
@@ -285,41 +300,9 @@ def assert_traj_equivalent(traj: XTCtraj, traj2: XTCtraj, opts: Opts):
         assert_frame_equivalent(frame, frame2, opts)
 
 
-def make_traj_det():
-    frames = []
-    for frame in range(1, 10):
-        step = frame
-        time = (np.ones(1) * frame * 1000.0)[
-            0
-        ]  # float32 scalar array gets converted to float if multiplied
-        natoms = frame + (frame > 10) * 100
-        box = np.zeros((3, 3), dtype=np.float32) + 1
-        data = (
-            ((np.arange(natoms * 3) / natoms).astype(np.float32).reshape(-1, 3)) - 0.5
-        ) * 100.0
-        frames.append(
-            XTCframe(
-                step=step,
-                time=time,
-                box=box,
-                precision=10.0 if natoms > 9 else 0.0,
-                natoms=natoms,
-                coords=data,
-                offset=-1,
-            )
-        )
-    return XTCtraj(frames=frames)
-
-
-def test_write_det():
-    name = "tmp.xtc"
-    traj = make_traj_det()
-    write_traj(traj, name)
-
-
 def test_read_write():
     with NamedTemporaryFile() as f:
-        traj = make_traj()
+        traj = XTCtraj(frames=list(make_traj_frames_iter(nframes=40)))
         write_traj(traj, f.name)
 
         traj2 = read_traj(f.name)
@@ -351,13 +334,30 @@ def test_read_write():
             assert (ind3 == ind[:-1]).all()
 
 
-def test_lmp():
+def get_traj(*, natoms: int, nframes: int, precision: float):
     d = Path(__file__).parent / ".cache"
     d.mkdir(exist_ok=True)
+    p = d / f"traj_{nframes=}_{natoms=}_{precision=}.xtc"
+    if not p.exists():
+        write_traj_iter(
+            make_traj_frames_iter(natoms=natoms, nframes=nframes, precision=precision),
+            str(p),
+        )
+    return p
+
+
+def get_lmp_run(*, natoms: int, nframes: int, precision: float):
+    d = Path(__file__).parent / ".cache"
+    d.mkdir(exist_ok=True)
+    p = d / f"lmp_{nframes=}_{natoms=}_{precision=}"
+    if not p.exists():
+        make_traj_lmp(path=p, natoms=natoms, precision=precision)
+    return p
+
+
+def test_lmp():
     for natoms, precision in product([2, 9, 10, 100], [10.0, 100.0, 1000.0]):
-        p = d / f"{natoms=}_{precision=}"
-        if not p.exists():
-            make_traj_lmp(path=p, natoms=natoms, precision=precision)
+        p = get_lmp_run(natoms=natoms, precision=precision, nframes=10)
         traj = read_lmp_yaml(p, precision=precision, time_scale_factor=1.0)
         traj2 = read_traj(str(p / "traj.xtc"))
         assert_traj_equivalent(

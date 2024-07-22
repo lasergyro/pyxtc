@@ -153,33 +153,39 @@ class XTCReader:
 
         self.frame = frame
 
-    def update_index(self):
+    def update_index(self, force: bool = False):
         def index_from_zero():
             self.index = core.index(self._fxtc, 0, False)
 
-        if len(self.index) == 0:
+        if force or len(self.index) == 0:
             index_from_zero()
+            return True
         else:
-            if self._file:
-                fstat_old = self._fstat
-                assert fstat_old is not None
-                self._fstat = Path(self._file).stat()
-                if self._fstat.st_mtime == fstat_old.st_mtime:
-                    return False
-                elif self._fstat.st_size < fstat_old.st_size:
-                    index_from_zero()
-                    return True
-            h = self.index[-1]
-            nhs = core.index(self._fxtc, h["offset"], True)
-            ok = len(nhs) == 1
-            if ok and (nh := nhs[0])["step"] == h["step"] and nh["time"] == h["time"]:
-                # index_from_current
-                index2 = core.index(self._fxtc, core.xdrgetpos(self._fxtc), False)
-
-                self.index = np.append(self.index, index2)
-            else:
+            assert self._file is not None
+            fstat_old = self._fstat
+            assert fstat_old is not None
+            self._fstat = Path(self._file).stat()
+            if self._fstat.st_mtime == fstat_old.st_mtime:
+                return False
+            elif self._fstat.st_size < fstat_old.st_size:
                 index_from_zero()
-        return True
+                return True
+            else:
+                h = self.index[-1]
+                nhs = core.index(self._fxtc, h["offset"], True)
+                ok = len(nhs) == 1
+                if (
+                    ok
+                    and (nh := nhs[0])["step"] == h["step"]
+                    and nh["time"] == h["time"]
+                ):
+                    # index_from_current
+                    index2 = core.index(self._fxtc, core.xdrgetpos(self._fxtc), False)
+
+                    self.index = np.append(self.index, index2)
+                else:
+                    index_from_zero()
+                return True
 
     def close(self):
         if self._fxtc is not None:
